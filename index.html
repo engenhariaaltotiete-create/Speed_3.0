@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c024e" />
+  <meta name="description" content="PWA para avaliação comercial de veículos usados da Speed Multimarcas." />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./assets/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./assets/icons/icon-192.png" />
+  <link rel="stylesheet" href="./css/styles.css" />
+  <title>Speed Avaliação</title>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <img src="./assets/logo.png" alt="Speed Multimarcas" class="brand-logo" />
+      <div><strong>Speed Avaliação</strong><span>Avaliação de veículos usados</span></div>
+    </div>
+    <button id="installBtn" class="btn btn-ghost hidden" type="button">Instalar app</button>
+  </header>
+
+  <main class="app-shell">
+    <section id="homeView" class="view active">
+      <div class="hero-card">
+        <div><p class="eyebrow">Vistorias locais</p><h1>Avaliações de veículos</h1><p>Os dados ficam armazenados neste dispositivo.</p></div>
+        <button id="newEvaluationBtn" class="btn btn-primary" type="button">+ Nova avaliação</button>
+      </div>
+      <div class="toolbar">
+        <div class="tabs" role="tablist"><button class="tab active" data-tab="active" role="tab">Em andamento</button><button class="tab" data-tab="archived" role="tab">Arquivadas</button></div>
+        <label class="search-box"><span class="sr-only">Buscar</span><input id="searchInput" type="search" placeholder="Buscar placa, veículo ou cliente" /></label>
+      </div>
+      <div class="secondary-actions">
+        <label class="btn btn-secondary file-btn">Importar JSON<input id="importJsonInput" type="file" accept=".json,application/json" hidden /></label>
+        <span id="storageInfo" class="storage-info">Calculando armazenamento…</span>
+      </div>
+      <div id="evaluationList" class="card-list"></div>
+      <div id="emptyState" class="empty-state hidden"><strong>Nenhuma avaliação encontrada</strong><span>Crie uma nova avaliação ou importe um arquivo JSON.</span></div>
+    </section>
+
+    <section id="formView" class="view">
+      <div class="form-topbar">
+        <button id="backBtn" class="icon-btn" type="button" aria-label="Voltar">←</button>
+        <div class="form-title"><span id="formStatusBadge" class="badge">Em andamento</span><strong id="formVehicleTitle">Nova avaliação</strong><small id="evaluationDate">Data da avaliação: --/--/----</small><small id="saveIndicator">Salvamento automático ativo</small></div>
+        <div></div>
+      </div>
+      <div class="progress-wrap"><div class="progress-meta"><span>Progresso da avaliação</span><strong id="progressText">0%</strong></div><div class="progress-track"><div id="progressBar" class="progress-bar"></div></div></div>
+
+      <form id="evaluationForm" autocomplete="off">
+        <section class="accordion" data-section="sellerClient">
+          <button class="accordion-head" type="button"><span><strong>1. Vendedor / Cliente</strong><small class="section-status">Pendente</small></span><span class="chevron">⌄</span></button>
+          <div class="accordion-body"><div class="grid">
+            <label class="span-2">Nome do vendedor<input name="sellerName" required /></label>
+            <label class="span-2">Nome do cliente<input name="clientName" required /></label>
+            <label>Celular do cliente<input name="clientMobile" inputmode="tel" type="tel" placeholder="(11) 99999-9999" /></label>
+            <label>Telefone fixo do cliente<input name="clientPhone" inputmode="tel" type="tel" placeholder="(11) 0000-0000" /></label>
+          </div></div>
+        </section>
+
+        <section class="accordion" data-section="vehicle">
+          <button class="accordion-head" type="button"><span><strong>2. Identificação do veículo</strong><small class="section-status">Pendente</small></span><span class="chevron">⌄</span></button>
+          <div class="accordion-body"><div class="grid">
+            <label>Placa<input name="plate" required maxlength="8" placeholder="ABC1D23" /></label>
+            <label>Marca<input name="brand" required /></label>
+            <label class="span-2">Modelo<input name="model" required /></label>
+            <label class="span-2">Versão<input name="version" /></label>
+            <label>Ano fab./modelo<input name="year" placeholder="2024/2025" /></label>
+            <label>Quilometragem<input name="mileage" type="number" min="0" /></label>
+            <label>Cor<input name="color" /></label>
+            <label>Câmbio<select name="transmission"><option value="">Selecionar</option><option>Manual</option><option>Automático</option><option>CVT</option><option>Automatizado</option></select></label>
+            <label>Combustível<select name="fuel"><option value="">Selecionar</option><option>Flex</option><option>Gasolina</option><option>Diesel</option><option>Híbrido</option><option>Elétrico</option></select></label>
+          </div></div>
+        </section>
+
+        <section class="accordion" data-section="bodywork"><button class="accordion-head" type="button"><span><strong>3. Lataria e pintura</strong><small class="section-status">Pendente</small></span><span class="chevron">⌄</span></button><div class="accordion-body"><div id="bodyworkItems" class="checklist-stack"></div></div></section>
+        <section class="accordion" data-section="interior"><button class="accordion-head" type="button"><span><strong>4. Interior e equipamentos</strong><small class="section-status">Pendente</small></span><span class="chevron">⌄</span></button><div class="accordion-body"><div id="interiorItems" class="checklist-stack"></div></div></section>
+        <section class="accordion" data-section="mechanical"><button class="accordion-head" type="button"><span><strong>5. Mecânica e pneus</strong><small class="section-status">Pendente</small></span><span class="chevron">⌄</span></button><div class="accordion-body"><div id="mechanicalItems" class="checklist-stack"></div></div></section>
+
+        <section class="accordion" data-section="photos">
+          <button class="accordion-head" type="button"><span><strong>6. Fotos orientadas</strong><small class="section-status">0/10</small></span><span class="chevron">⌄</span></button>
+          <div class="accordion-body">
+            <div class="photo-guidance"><strong>Orientação para as fotos</strong><span>Tire as fotos preferencialmente com o celular na horizontal (paisagem), para melhor enquadramento e aproveitamento no relatório PDF.</span></div>
+            <p class="helper">Toque em cada cartão para fotografar ou escolher uma imagem. As fotos são comprimidas antes de serem salvas.</p>
+            <div id="photoGrid" class="photo-grid"></div>
+            <div class="divider"></div>
+            <div class="section-row"><div><strong>Fotos adicionais</strong><small>Use para registrar avarias ou outras ocorrências.</small></div><label class="btn btn-secondary file-btn">+ Adicionar foto<input id="extraPhotoInput" type="file" accept="image/*" capture="environment" hidden /></label></div>
+            <div id="extraPhotoList" class="extra-photo-list"></div>
+          </div>
+        </section>
+
+        <section class="accordion" data-section="commercial">
+          <button class="accordion-head" type="button"><span><strong>7. Avaliação comercial</strong><small class="section-status">Pendente</small></span><span class="chevron">⌄</span></button>
+          <div class="accordion-body"><div class="grid">
+            <label>Valor FIPE / referência<input name="referenceValue" inputmode="decimal" placeholder="0,00" /></label>
+            <label>Valor solicitado<input name="requestedValue" inputmode="decimal" placeholder="0,00" /></label>
+            <label>Funilaria / pintura<input name="bodyworkCost" inputmode="decimal" placeholder="0,00" /></label>
+            <label>Mecânica<input name="mechanicalCost" inputmode="decimal" placeholder="0,00" /></label>
+            <label>Pneus<input name="tiresCost" inputmode="decimal" placeholder="0,00" /></label>
+            <label>Outros custos<input name="otherCost" inputmode="decimal" placeholder="0,00" /></label>
+            <label class="span-2">Custo total de preparação<input id="totalCost" readonly /></label>
+            <label class="span-2">Valor sugerido para compra<input name="suggestedPurchaseValue" inputmode="decimal" placeholder="0,00" /></label>
+            <label class="span-2">Classificação geral<select name="overallRating"><option value="">Selecionar</option><option>Excelente</option><option>Bom</option><option>Regular</option><option>Ruim</option></select></label>
+            <label class="span-2">Observações finais<textarea name="finalNotes" rows="4"></textarea></label>
+          </div></div>
+        </section>
+      </form>
+
+      <div class="sticky-actions single-action"><button id="generatePdfBtn" class="btn btn-primary" type="button">Gerar PDF</button></div>
+    </section>
+  </main>
+
+  <div id="pdfModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pdfModalTitle">
+    <div class="modal-backdrop" data-close-pdf-modal></div>
+    <div class="modal-card">
+      <button class="modal-close" type="button" data-close-pdf-modal aria-label="Fechar">×</button>
+      <span class="modal-icon">✓</span><h2 id="pdfModalTitle">PDF gerado com sucesso</h2><p>Escolha o que deseja fazer com o relatório.</p>
+      <div class="modal-actions"><button id="openPdfBtn" class="btn btn-primary" type="button">Abrir PDF</button><button id="sharePdfBtn" class="btn btn-secondary" type="button">Compartilhar</button><button id="downloadPdfBtn" class="btn btn-secondary" type="button">Baixar</button></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="./js/database.js"></script><script src="./js/pdf.js"></script><script src="./js/app.js"></script>
+</body>
+</html>
