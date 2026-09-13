@@ -18,6 +18,68 @@ async function generateEvaluationPDF(record){
  section('7. Avaliação comercial');pairGrid([['Valor FIPE / referência',data.referenceValue],['Valor solicitado',data.requestedValue],['Funilaria / pintura',data.bodyworkCost],['Mecânica',data.mechanicalCost],['Pneus',data.tiresCost],['Outros custos',data.otherCost],['Custo total de preparação',data.totalCost],['Valor sugerido para compra',data.suggestedPurchaseValue]]);
  need(22);doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(35,35,40);doc.text('Classificação geral:',M,y);const rk=pdfStatusKind(data.overallRating);if(rk==='good')doc.setTextColor(...green);else if(rk==='bad')doc.setTextColor(...red);else if(rk==='warn')doc.setTextColor(...amber);else doc.setTextColor(...gray);doc.text(String(data.overallRating||'-'),M+42,y);doc.setDrawColor(...blue);doc.setLineWidth(.18);doc.line(M,y+3,W-M,y+3);y+=8;doc.setFont('helvetica','bold');doc.setTextColor(35,35,40);doc.text('Observações finais:',M,y);doc.setFont('helvetica','normal');doc.setTextColor(25,25,30);const notes=doc.splitTextToSize(String(data.finalNotes||'-'),W-2*M);doc.text(notes,M,y+4);const notesH=Math.max(10,notes.length*4+6);doc.setDrawColor(...blue);doc.setLineWidth(.18);doc.line(M,y+notesH-1,W-M,y+notesH-1);y+=notesH;
  const photos=[...(record.photos||[]).sort((a,b)=>(a.index??999)-(b.index??999)).map(p=>({...p,isExtra:false})),...(record.extraPhotos||[]).map(p=>({...p,isExtra:true}))];
- if(photos.length){for(let i=0;i<photos.length;i+=2){newPage();section('6. Fotos da vistoria');const slots=[photos[i],photos[i+1]],topY=y,imageW=W-2*M,imageH=88;for(let s=0;s<2;s++){const p=slots[s];if(!p)continue;const boxY=topY+s*122;doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(...navy);doc.text(p.isExtra?'Foto adicional':(p.label||'Foto'),M,boxY);try{const props=doc.getImageProperties(p.dataUrl);const ratio=props.width/props.height;let drawW=imageW,drawH=drawW/ratio;if(drawH>imageH){drawH=imageH;drawW=drawH*ratio;}const drawX=M+(imageW-drawW)/2;const drawY=boxY+4+(imageH-drawH)/2;doc.addImage(p.dataUrl,'JPEG',drawX,drawY,drawW,drawH,undefined,'FAST');}catch(e){doc.setDrawColor(220);doc.rect(M,boxY+4,imageW,imageH);doc.setTextColor(...gray);doc.setFont('helvetica','normal');doc.text('Não foi possível renderizar esta foto.',M+4,boxY+12);}if(p.isExtra){doc.setFont('helvetica','bold');doc.setFontSize(7.8);doc.setTextColor(...gray);doc.text('Apontamento:',M,boxY+98);doc.setFont('helvetica','normal');doc.setTextColor(30,30,35);doc.text(doc.splitTextToSize(String(p.note||'-'),imageW),M,boxY+102);}}}}else{section('6. Fotos da vistoria');doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...gray);doc.text('Nenhuma foto registrada nesta vistoria.',M,y);}
+ if(photos.length){for(let i=0;i<photos.length;i+=2){newPage();section('6. Fotos da vistoria');const slots=[photos[i],photos[i+1]],topY=y,imageW=W-2*M,imageH=88;for(let s=0;s<2;s++){const p=slots[s];if(!p)continue;const boxY=topY+s*122;doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(...navy);doc.text(p.isExtra?'Foto adicional':(p.label||'Foto'),M,boxY);try{const props=doc.getImageProperties(p.dataUrl);const ratio=props.width/props.height;let drawW=imageW,drawH=drawW/ratio;if(drawH>imageH){drawH=imageH;drawW=drawH*ratio;}const drawX=M+(imageW-drawW)/2;const drawY=boxY+4+(imageH-drawH)/2;try {
+  const props = doc.getImageProperties(p.dataUrl);
+
+  const imageRatio =
+    props.width / props.height;
+
+  const boxRatio =
+    imageW / imageH;
+
+  let drawW;
+  let drawH;
+
+  if (imageRatio > boxRatio) {
+    // Foto mais larga que a área disponível
+    drawW = imageW;
+    drawH = imageW / imageRatio;
+  } else {
+    // Foto mais alta que a área disponível
+    drawH = imageH;
+    drawW = imageH * imageRatio;
+  }
+
+  const drawX =
+    M + (imageW - drawW) / 2;
+
+  const drawY =
+    boxY +
+    4 +
+    (imageH - drawH) / 2;
+
+  doc.addImage(
+    p.dataUrl,
+    'JPEG',
+    drawX,
+    drawY,
+    drawW,
+    drawH,
+    undefined,
+    'FAST'
+  );
+} catch (e) {
+  doc.setDrawColor(220);
+
+  doc.rect(
+    M,
+    boxY + 4,
+    imageW,
+    imageH
+  );
+
+  doc.setTextColor(...gray);
+
+  doc.setFont(
+    'helvetica',
+    'normal'
+  );
+
+  doc.text(
+    'Não foi possível renderizar esta foto.',
+    M + 4,
+    boxY + 12
+  );
+};}catch(e){doc.setDrawColor(220);doc.rect(M,boxY+4,imageW,imageH);doc.setTextColor(...gray);doc.setFont('helvetica','normal');doc.text('Não foi possível renderizar esta foto.',M+4,boxY+12);}if(p.isExtra){doc.setFont('helvetica','bold');doc.setFontSize(7.8);doc.setTextColor(...gray);doc.text('Apontamento:',M,boxY+98);doc.setFont('helvetica','normal');doc.setTextColor(30,30,35);doc.text(doc.splitTextToSize(String(p.note||'-'),imageW),M,boxY+102);}}}}else{section('6. Fotos da vistoria');doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...gray);doc.text('Nenhuma foto registrada nesta vistoria.',M,y);}
  const total=doc.internal.getNumberOfPages();for(let p=1;p<=total;p++){doc.setPage(p);addFooter(p,total);}const sanitizePart=(value,fallback)=>{const text=String(value||fallback||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_+|_+$/g,'');return text||fallback||'nao_informado';};const years=String(data.year||'').match(/\d{4}/g),year=years?.length?years[years.length-1]:(data.year||'sem_ano'),filename=[sanitizePart(data.brand,'sem_marca'),sanitizePart(data.model,'sem_modelo'),sanitizePart(year,'sem_ano'),sanitizePart(data.color,'sem_cor')].join('_')+'.pdf',blob=doc.output('blob'),url=URL.createObjectURL(blob);if(lastGeneratedPdf?.url)URL.revokeObjectURL(lastGeneratedPdf.url);lastGeneratedPdf={blob,url,filename};return lastGeneratedPdf;
 }
