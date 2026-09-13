@@ -1,5 +1,5 @@
 
-const CACHE='speed-avaliacao-v6';
+const CACHE='speed-avaliacao-v7';
 const ASSETS=[
   './','index.html','manifest.json','css/styles.css','js/database.js','js/pdf.js','js/app.js',
   'assets/logo.png','assets/icons/icon-192.png','assets/icons/icon-512.png',
