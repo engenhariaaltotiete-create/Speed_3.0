@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c024e" />
+  <meta name="description" content="PWA para avaliação comercial de veículos usados da Speed Multimarcas." />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./assets/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./assets/icons/icon-192.png" />
+  <link rel="stylesheet" href="./css/styles.css" />
+  <title>Speed Avaliação</title>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <img src="./assets/logo.png" alt="Speed Multimarcas" class="brand-logo" />
+      <div class="brand-copy">
+        <strong>Speed Avaliação</strong>
+        <span>Avaliação de veículos usados</span>
+      </div>
+    </div>
+    <button id="installBtn" class="btn btn-install hidden" type="button">Instalar app</button>
+  </header>
+
+  <main class="app-shell">
+    <section id="homeView" class="view active">
+      <div class="home-intro">
+        <img src="./assets/logo.png" alt="Speed Multimarcas" class="home-logo" />
+        <h1>Suas avaliações em um só lugar.</h1>
+        <p>Vistorias rápidas, organizadas e armazenadas neste dispositivo.</p>
+      </div>
+
+      <div class="home-panel">
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="active" role="tab">Em andamento</button>
+          <button class="tab" data-tab="archived" role="tab">Arquivadas</button>
+        </div>
+
+        <label class="search-box">
+          <span class="search-icon" aria-hidden="true">⌕</span>
+          <span class="sr-only">Buscar</span>
+          <input id="searchInput" type="search" placeholder="Buscar por marca, modelo, placa ou cliente" />
+        </label>
+
+        <div class="storage-card">
+          <div class="storage-card-head">
+            <span class="storage-cloud" aria-hidden="true">☁</span>
+            <div class="storage-copy">
+              <strong>Armazenamento local</strong>
+              <span id="storageInfo" class="storage-info">Calculando armazenamento…</span>
+            </div>
+            <strong id="storagePercent" class="storage-percent">0%</strong>
+          </div>
+          <div class="storage-progress-track">
+            <div id="storageProgressBar" class="storage-progress-bar"></div>
+          </div>
+        </div>
+
+        <div id="evaluationList" class="card-list"></div>
+
+        <div id="emptyState" class="empty-state hidden">
+          <strong>Nenhuma avaliação encontrada</strong>
+          <span>Crie uma nova avaliação ou importe um arquivo JSON.</span>
+        </div>
+
+        <div class="home-actions">
+          <button id="newEvaluationBtn" class="btn btn-primary" type="button">
+            <span aria-hidden="true">＋</span> Nova avaliação
+          </button>
+          <label class="btn btn-secondary file-btn">
+            <span aria-hidden="true">⇩</span> Importar JSON
+            <input id="importJsonInput" type="file" accept=".json,application/json" hidden />
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section id="formView" class="view">
+      <div class="form-topbar">
+        <button id="backBtn" class="icon-btn" type="button" aria-label="Voltar">←</button>
+        <div class="form-title"><span id="formStatusBadge" class="badge">Em andamento</span><strong id="formVehicleTitle">Nova avaliação</strong><small id="evaluationDate">Data da avaliação: --/--/----</small><small id="saveIndicator">Salvamento automático ativo</small></div>
+        <div></div>
+      </div>
+      <div class="progress-wrap"><div class="progress-meta"><span>Progresso da avaliação</span><strong id="progressText">0%</strong></div><div class="progress-track"><div id="progressBar" class="progress-bar"></div></div></div>
+
+      <form id="evaluationForm" autocomplete="off">
+        <section class="accordion" data-section="sellerClient">
+          <button class="accordion-head" type="button">
+            <span class="section-icon"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0v1H5v-1Z"/></svg></span>
+            <span class="section-copy">
+              <strong>Vendedor / Cliente</strong>
+              <small>Dados do vendedor e do cliente</small>
+              <small class="section-status">Pendente</small>
+            </span>
+            <span class="chevron">⌄</span>
+          </button>
+          <div class="accordion-body"><div class="grid">
+            <label class="span-2">Nome do vendedor<input name="sellerName" required /></label>
+            <label class="span-2">Nome do cliente<input name="clientName" required /></label>
+            <label>Celular do cliente<input name="clientMobile" inputmode="tel" type="tel" placeholder="(11) 99999-9999" /></label>
+            <label>Telefone fixo do cliente<input name="clientPhone" inputmode="tel" type="tel" placeholder="(11) 0000-0000" /></label>
+          </div></div>
+        </section>
+
+        <section class="accordion" data-section="vehicle">
+          <button class="accordion-head" type="button">
+            <span class="section-icon"><svg viewBox="0 0 24 24"><path d="M5.2 6.3 6.7 3h10.6l1.5 3.3L21 8v9h-2v2h-2v-2H7v2H5v-2H3V8l2.2-1.7ZM7.6 5 6.7 7h10.6l-.9-2H7.6ZM6 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm12 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg></span>
+            <span class="section-copy">
+              <strong>Identificação do veículo</strong>
+              <small>Marca, modelo, ano, versão e placa</small>
+              <small class="section-status">Pendente</small>
+            </span>
+            <span class="chevron">⌄</span>
+          </button>
+          <div class="accordion-body"><div class="grid">
+            <label>Placa<input name="plate" required maxlength="8" placeholder="ABC1D23" /></label>
+            <label>Marca<input name="brand" required /></label>
+            <label class="span-2">Modelo<input name="model" required /></label>
+            <label class="span-2">Versão<input name="version" /></label>
+            <label>Ano fab./modelo<input name="year" placeholder="2024/2025" /></label>
+            <label>Quilometragem<input name="mileage" type="number" min="0" /></label>
+            <label>Cor<input name="color" /></label>
+            <label>Câmbio<select name="transmission"><option value="">Selecionar</option><option>Manual</option><option>Automático</option><option>CVT</option><option>Automatizado</option></select></label>
+            <label>Combustível<select name="fuel"><option value="">Selecionar</option><option>Flex</option><option>Gasolina</option><option>Diesel</option><option>Híbrido</option><option>Elétrico</option></select></label>
+          </div></div>
+        </section>
+
+        <section class="accordion" data-section="bodywork"><button class="accordion-head" type="button">
+            <span class="section-icon"><svg viewBox="0 0 24 24"><path d="m14.7 3.3 6 6-2.1 2.1-6-6 2.1-2.1ZM11.2 6.8l6 6-7.8 7.8H3.4v-6l7.8-7.8ZM5.4 15.4v3.2h3.2l5.8-5.8-3.2-3.2-5.8 5.8Z"/></svg></span>
+            <span class="section-copy">
+              <strong>Lataria e pintura</strong>
+              <small>Estado geral da lataria e pintura</small>
+              <small class="section-status">Pendente</small>
+            </span>
+            <span class="chevron">⌄</span>
+          </button><div class="accordion-body"><div id="bodyworkItems" class="checklist-stack"></div></div></section>
+        <section class="accordion" data-section="interior"><button class="accordion-head" type="button">
+            <span class="section-icon"><svg viewBox="0 0 24 24"><path d="M8 4a3 3 0 1 1 6 0c0 1.3-.8 2.4-2 2.8V10h4.5A2.5 2.5 0 0 1 19 12.5V19h-2v-6.5a.5.5 0 0 0-.5-.5H10V7H8V4Zm-3 7h2v8h10v2H5V11Z"/></svg></span>
+            <span class="section-copy">
+              <strong>Interior e equipamentos</strong>
+              <small>Conservação e itens do veículo</small>
+              <small class="section-status">Pendente</small>
+            </span>
+            <span class="chevron">⌄</span>
+          </button><div class="accordion-body"><div id="interiorItems" class="checklist-stack"></div></div></section>
+        <section class="accordion" data-section="mechanical"><button class="accordion-head" type="button">
+            <span class="section-icon"><svg viewBox="0 0 24 24"><path d="M10.8 2h2.4l.5 2.2c.6.2 1.2.4 1.7.7l1.9-1.2 1.7 1.7-1.2 1.9c.3.5.5 1.1.7 1.7l2.2.5v2.4l-2.2.5c-.2.6-.4 1.2-.7 1.7l1.2 1.9-1.7 1.7-1.9-1.2c-.5.3-1.1.5-1.7.7l-.5 2.2h-2.4l-.5-2.2a7.8 7.8 0 0 1-1.7-.7l-1.9 1.2L5 16l1.2-1.9a7.8 7.8 0 0 1-.7-1.7l-2.2-.5V9.5L5.5 9c.2-.6.4-1.2.7-1.7L5 5.4l1.7-1.7 1.9 1.2c.5-.3 1.1-.5 1.7-.7L10.8 2ZM12 8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg></span>
+            <span class="section-copy">
+              <strong>Mecânica e pneus</strong>
+              <small>Motor, câmbio, pneus e funcionamento</small>
+              <small class="section-status">Pendente</small>
+            </span>
+            <span class="chevron">⌄</span>
+          </button><div class="accordion-body"><div id="mechanicalItems" class="checklist-stack"></div></div></section>
+
+        <section class="accordion" data-section="photos">
+          <button class="accordion-head" type="button">
+            <span class="section-icon"><svg viewBox="0 0 24 24"><path d="M8.5 4 10 2h4l1.5 2H20a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4.5ZM12 8a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/></svg></span>
+            <span class="section-copy">
+              <strong>Fotos orientadas</strong>
+              <small>Registre as fotos conforme o guia</small>
+              <small class="section-status">0/10 preenchidos</small>
+            </span>
+            <span class="chevron">⌄</span>
+          </button>
+          <div class="accordion-body">
+            <div class="photo-guidance"><strong>Orientação para as fotos</strong><span>Tire as fotos preferencialmente com o celular na horizontal (paisagem), para melhor enquadramento e aproveitamento no relatório PDF.</span></div>
+            <p class="helper">Toque em cada cartão para fotografar ou escolher uma imagem. As fotos são comprimidas antes de serem salvas.</p>
+            <div id="photoGrid" class="photo-grid"></div>
+            <div class="divider"></div>
+            <div class="section-row"><div><strong>Fotos adicionais</strong><small>Use para registrar avarias ou outras ocorrências.</small></div><label class="btn btn-secondary file-btn">+ Adicionar foto<input id="extraPhotoInput" type="file" accept="image/*" capture="environment" hidden /></label></div>
+            <div id="extraPhotoList" class="extra-photo-list"></div>
+          </div>
+        </section>
+
+        <section class="accordion" data-section="commercial">
+          <button class="accordion-head" type="button">
+            <span class="section-icon"><svg viewBox="0 0 24 24"><path d="M4 20H2v-7h2v7Zm6 0H7V9h3v11Zm6 0h-3V5h3v15Zm6 0h-3V2h3v18Z"/></svg></span>
+            <span class="section-copy">
+              <strong>Avaliação comercial</strong>
+              <small>Valores, custos, observações e resultado</small>
+              <small class="section-status">Pendente</small>
+            </span>
+            <span class="chevron">⌄</span>
+          </button>
+          <div class="accordion-body"><div class="grid">
+            <label>Valor FIPE / referência<input name="referenceValue" inputmode="decimal" placeholder="0,00" /></label>
+            <label>Valor solicitado<input name="requestedValue" inputmode="decimal" placeholder="0,00" /></label>
+            <label>Funilaria / pintura<input name="bodyworkCost" inputmode="decimal" placeholder="0,00" /></label>
+            <label>Mecânica<input name="mechanicalCost" inputmode="decimal" placeholder="0,00" /></label>
+            <label>Pneus<input name="tiresCost" inputmode="decimal" placeholder="0,00" /></label>
+            <label>Outros custos<input name="otherCost" inputmode="decimal" placeholder="0,00" /></label>
+            <label class="span-2">Custo total de preparação<input id="totalCost" readonly /></label>
+            <label class="span-2">Valor sugerido para compra<input name="suggestedPurchaseValue" inputmode="decimal" placeholder="0,00" /></label>
+            <label class="span-2">Classificação geral<select name="overallRating"><option value="">Selecionar</option><option>Excelente</option><option>Bom</option><option>Regular</option><option>Ruim</option></select></label>
+            <label class="span-2">Observações finais<textarea name="finalNotes" rows="4"></textarea></label>
+          </div></div>
+        </section>
+      </form>
+
+      <div class="sticky-actions">
+        <button id="bottomBackBtn" class="btn btn-back" type="button">← Voltar</button>
+        <button id="generatePdfBtn" class="btn btn-primary" type="button">Gerar PDF</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="pdfModal" class="modal completion-modal hidden" role="dialog" aria-modal="true" aria-labelledby="pdfModalTitle">
+    <div class="modal-backdrop" data-close-pdf-modal></div>
+    <div class="completion-sheet">
+      <button class="modal-close" type="button" data-close-pdf-modal aria-label="Fechar">×</button>
+      <span class="completion-icon">✓</span>
+      <h2 id="pdfModalTitle">Avaliação concluída!</h2>
+      <p>O relatório em PDF foi gerado com sucesso.</p>
+
+      <div class="report-preview">
+        <div class="preview-head">
+          <img src="./assets/logo.png" alt="Speed Multimarcas" />
+          <strong>RELATÓRIO DE AVALIAÇÃO<br>DE VEÍCULO USADO</strong>
+        </div>
+        <div class="preview-body">
+          <div id="previewPhoto" class="preview-photo preview-placeholder"><span>🚘</span></div>
+          <div class="preview-data">
+            <strong id="previewVehicle">Veículo</strong>
+            <span id="previewDetails">Dados da avaliação</span>
+            <span id="previewPlate">Placa: —</span>
+            <span id="previewMileage">Quilometragem: —</span>
+          </div>
+        </div>
+        <div class="preview-date" id="previewDate">Gerado agora</div>
+        <div class="preview-band">
+          <img src="./assets/logo.png" alt="" />
+          <span>AVALIAÇÃO SPEED MULTIMARCAS</span>
+        </div>
+      </div>
+
+      <div class="completion-actions">
+        <button id="openPdfBtn" class="btn btn-open-pdf" type="button">↗ Abrir PDF</button>
+        <div class="completion-actions-row">
+          <button id="sharePdfBtn" class="btn btn-secondary" type="button">⌯ Compartilhar</button>
+          <button id="downloadPdfBtn" class="btn btn-secondary" type="button">⇩ Baixar</button>
+        </div>
+        <button id="finishToHomeBtn" class="finish-link" type="button">Concluir e voltar para o início</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="./js/database.js"></script><script src="./js/pdf.js"></script><script src="./js/app.js"></script>
+</body>
+</html>
