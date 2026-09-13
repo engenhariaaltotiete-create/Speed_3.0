@@ -1,0 +1,448 @@
+let lastGeneratedPdf=null;
+
+async function assetToDataUrl(path){
+  const response=await fetch(new URL(path,document.baseURI).href);
+  if(!response.ok)throw new Error('Falha ao carregar '+path);
+  const blob=await response.blob();
+  return await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function pdfStatusKind(value){
+  const s=String(value||'').toLowerCase();
+  if(['ok','normal','bom','excelente','presente','não','nao'].includes(s))return'good';
+  if(['avaria','problema','anormal','ruim','sim','ausente','acesa'].includes(s))return'bad';
+  if(['regular','atenção','atencao'].includes(s))return'warn';
+  return'neutral';
+}
+
+function brDate(iso){
+  try{
+    return new Intl.DateTimeFormat('pt-BR',{dateStyle:'short'}).format(new Date(iso));
+  }catch{
+    return'-';
+  }
+}
+
+function pdfIsFilled(value){
+  return String(value ?? '').trim()!=='';
+}
+
+function pdfProgress(done,total){
+  const pct=total?Math.round(done/total*100):0;
+  return `${done}/${total} • ${pct}%`;
+}
+
+async function generateEvaluationPDF(record){
+  if(!window.jspdf?.jsPDF){
+    throw new Error('Biblioteca de PDF indisponível.');
+  }
+
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'mm',format:'a4',compress:true});
+  const W=210,H=297,M=14;
+  const navy=[12,2,78],blue=[12,2,78],green=[22,128,60],red=[198,40,40],amber=[183,121,0],gray=[95,98,110];
+  const data=record.data||{};
+  let logoData=null;
+  try{logoData=await assetToDataUrl('./assets/logo.png');}catch(e){console.warn(e);}
+
+
+  const BODYWORK_PDF=['Para-choque dianteiro','Capô','Lateral dianteira esquerda','Porta dianteira esquerda','Porta traseira esquerda','Lateral traseira esquerda','Tampa do porta-malas','Para-choque traseiro','Lateral traseira direita','Porta traseira direita','Porta dianteira direita','Lateral dianteira direita','Teto'];
+  const INTERIOR_PDF=['Bancos e revestimentos','Painel e acabamento','Forro do teto','Ar-condicionado','Vidros e travas elétricas','Multimídia / rádio','Câmera / sensor de estacionamento','Luzes de advertência no painel'];
+  const MECHANICAL_PDF=['Motor em funcionamento','Ruído anormal do motor','Vazamento aparente','Câmbio / embreagem','Direção','Suspensão / ruídos','Freios','Pneus dianteiros','Pneus traseiros','Rodas','Estepe','Macaco e chave de roda','Chave reserva','Manual'];
+
+  const PHOTO_SLOTS_PDF=[
+    'Dianteira 45° esquerda',
+    'Traseira 45° esquerda',
+    'Traseira 45° direita',
+    'Dianteira 45° direita',
+    'Painel completo',
+    'Quilometragem com veículo ligado',
+    'Bancos dianteiros',
+    'Bancos traseiros',
+    'Porta-malas',
+    'Compartimento do motor'
+  ];
+
+  const countChecklist=items=>Object.values(items||{}).filter(item=>pdfIsFilled(item?.value)).length;
+  const normalizeChecklist=(items,labels,group)=>{
+    const source=items||{};
+    return labels.map((label,index)=>{
+      const key=`${group}_${index}`;
+      const saved=source[key]||Object.values(source).find(item=>item?.label===label)||{};
+      return {label,value:saved.value||'',note:saved.note||''};
+    });
+  };
+
+  const bodyworkItems=normalizeChecklist(record.checklist?.bodywork,BODYWORK_PDF,'bodywork');
+  const interiorItems=normalizeChecklist(record.checklist?.interior,INTERIOR_PDF,'interior');
+  const mechanicalItems=normalizeChecklist(record.checklist?.mechanical,MECHANICAL_PDF,'mechanical');
+
+  const sellerFields=[data.sellerName,data.clientName,data.clientMobile];
+  const sellerDone=sellerFields.filter(pdfIsFilled).length;
+  const sellerTotal=3;
+
+  const vehicleFields=[
+    data.plate,data.brand,data.model,data.version,data.year,
+    data.mileage,data.color,data.transmission,data.fuel
+  ];
+  const vehicleDone=vehicleFields.filter(pdfIsFilled).length;
+  const vehicleTotal=vehicleFields.length;
+
+  const bodyworkDone=countChecklist(bodyworkItems);
+  const bodyworkTotal=BODYWORK_PDF.length;
+
+  const interiorDone=countChecklist(interiorItems);
+  const interiorTotal=INTERIOR_PDF.length;
+
+  const mechanicalDone=countChecklist(mechanicalItems);
+  const mechanicalTotal=MECHANICAL_PDF.length;
+
+  const photosDone=(record.photos||[]).length;
+  const photosTotal=PHOTO_SLOTS_PDF.length;
+
+  const commercialValues=[
+    data.referenceValue,data.requestedValue,data.bodyworkCost,data.mechanicalCost,
+    data.tiresCost,data.otherCost,data.totalCost,data.suggestedPurchaseValue,data.overallRating
+  ];
+  const commercialDone=commercialValues.filter(pdfIsFilled).length;
+  const commercialTotal=commercialValues.length;
+
+  let y=28;
+
+  const addHeader=()=>{
+    doc.setFillColor(...navy);
+    doc.rect(0,0,W,22,'F');
+
+    if(logoData){
+      try{doc.addImage(logoData,'PNG',M,3,34,16);}catch(e){}
+    }
+
+    doc.setTextColor(255,255,255);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10.5);
+    doc.text('RELATÓRIO DE AVALIAÇÃO DE VEÍCULO USADO',W-M,9,{align:'right'});
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.text(`Data da avaliação: ${brDate(record.createdAt)}`,W-M,15,{align:'right'});
+    doc.setTextColor(0,0,0);
+  };
+
+  const addFooter=(page,total)=>{
+    doc.setDrawColor(210,214,226);
+    doc.setLineWidth(.25);
+    doc.line(M,H-14,W-M,H-14);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.3);
+    doc.setTextColor(...gray);
+    doc.text('Speed Multimarcas • Av. Antonio Marques Figueira, 149 • Suzano/SP • (11) 4747-8724',M,H-9);
+    doc.text(`CNPJ 35.649.942/0001-80 • Página ${page} de ${total}`,W-M,H-9,{align:'right'});
+  };
+
+  const newPage=()=>{doc.addPage();addHeader();y=29;};
+  const need=h=>{if(y+h>H-20)newPage();};
+
+  const section=(title,done,total)=>{
+    need(12);
+    doc.setFillColor(...navy);
+    doc.roundedRect(M,y,W-2*M,8,1.8,1.8,'F');
+
+    doc.setTextColor(255,255,255);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9);
+    doc.text(title,M+3,y+5.2);
+
+    if(Number.isFinite(done)&&Number.isFinite(total)){
+      doc.setFontSize(8);
+      doc.text(pdfProgress(done,total),W-M-3,y+5.2,{align:'right'});
+    }
+
+    doc.setTextColor(0,0,0);
+    y+=11;
+  };
+
+  const displayValue=value=>pdfIsFilled(value)?String(value):'Não informado';
+
+  const pairGrid=rows=>{
+    const colW=(W-2*M-8)/2;
+    const leftX=M,rightX=M+colW+8;
+
+    for(let i=0;i<rows.length;i+=2){
+      need(11);
+
+      const draw=(row,x)=>{
+        if(!row)return;
+        doc.setFontSize(8);
+        doc.setFont('helvetica','bold');
+        doc.setTextColor(35,35,40);
+        doc.text(`${row[0]}:`,x,y);
+
+        doc.setFont('helvetica','normal');
+        doc.setTextColor(25,25,30);
+        doc.text(doc.splitTextToSize(displayValue(row[1]),colW),x,y+4);
+
+        doc.setDrawColor(...blue);
+        doc.setLineWidth(.18);
+        doc.line(x,y+7.5,x+colW,y+7.5);
+      };
+
+      draw(rows[i],leftX);
+      draw(rows[i+1],rightX);
+      y+=10;
+    }
+  };
+
+  const checklistTwoColumns=(title,items,done,total)=>{
+    section(title,done,total);
+
+    const entries=Object.values(items||{});
+    const mid=Math.ceil(entries.length/2);
+    const cols=[entries.slice(0,mid),entries.slice(mid)];
+    const gap=8;
+    const colW=(W-2*M-gap)/2;
+    const x1=M,x2=M+colW+gap;
+    const rows=Math.max(cols[0].length,cols[1].length);
+
+    for(let r=0;r<rows;r++){
+      need(13);
+
+      const draw=(item,x)=>{
+        if(!item)return;
+
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica','bold');
+        doc.setTextColor(30,30,35);
+        doc.text(doc.splitTextToSize(item.label||'Item',colW-26),x,y);
+
+        const hasValue=pdfIsFilled(item.value);
+        const shown=hasValue?String(item.value):'Não avaliado';
+        const kind=hasValue?pdfStatusKind(item.value):'neutral';
+
+        if(kind==='good')doc.setTextColor(...green);
+        else if(kind==='bad')doc.setTextColor(...red);
+        else if(kind==='warn')doc.setTextColor(...amber);
+        else doc.setTextColor(...gray);
+
+        doc.setFont('helvetica','bold');
+        doc.text(shown,x+colW,y,{align:'right'});
+
+        if(item.note){
+          doc.setFont('helvetica','normal');
+          doc.setTextColor(...gray);
+          doc.text(doc.splitTextToSize(item.note,colW),x,y+4);
+        }
+
+        doc.setDrawColor(...blue);
+        doc.setLineWidth(.18);
+        doc.line(x,y+8.5,x+colW,y+8.5);
+      };
+
+      draw(cols[0][r],x1);
+      draw(cols[1][r],x2);
+      y+=12;
+    }
+    y+=2;
+  };
+
+  addHeader();
+
+  section('1. Vendedor / Cliente',sellerDone,sellerTotal);
+  pairGrid([
+    ['Nome do vendedor',data.sellerName],
+    ['Nome do cliente',data.clientName],
+    ['Celular do cliente',data.clientMobile],
+    ['Telefone fixo do cliente',data.clientPhone]
+  ]);
+
+  section('2. Identificação do veículo',vehicleDone,vehicleTotal);
+  pairGrid([
+    ['Placa',data.plate],
+    ['Marca',data.brand],
+    ['Modelo',data.model],
+    ['Versão',data.version],
+    ['Ano fab./modelo',data.year],
+    ['Quilometragem',pdfIsFilled(data.mileage)?`${Number(data.mileage).toLocaleString('pt-BR')} km`:''],
+    ['Cor',data.color],
+    ['Câmbio',data.transmission],
+    ['Combustível',data.fuel]
+  ]);
+
+  checklistTwoColumns('3. Lataria e pintura',bodyworkItems,bodyworkDone,bodyworkTotal);
+  checklistTwoColumns('4. Interior e equipamentos',interiorItems,interiorDone,interiorTotal);
+  checklistTwoColumns('5. Mecânica e pneus',mechanicalItems,mechanicalDone,mechanicalTotal);
+
+  section('7. Avaliação comercial',commercialDone,commercialTotal);
+  pairGrid([
+    ['Valor FIPE / referência',data.referenceValue],
+    ['Valor solicitado',data.requestedValue],
+    ['Funilaria / pintura',data.bodyworkCost],
+    ['Mecânica',data.mechanicalCost],
+    ['Pneus',data.tiresCost],
+    ['Outros custos',data.otherCost],
+    ['Custo total de preparação',data.totalCost],
+    ['Valor sugerido para compra',data.suggestedPurchaseValue]
+  ]);
+
+  need(22);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(8);
+  doc.setTextColor(35,35,40);
+  doc.text('Classificação geral:',M,y);
+
+  const ratingFilled=pdfIsFilled(data.overallRating);
+  const rk=ratingFilled?pdfStatusKind(data.overallRating):'neutral';
+
+  if(rk==='good')doc.setTextColor(...green);
+  else if(rk==='bad')doc.setTextColor(...red);
+  else if(rk==='warn')doc.setTextColor(...amber);
+  else doc.setTextColor(...gray);
+
+  doc.text(ratingFilled?String(data.overallRating):'Não informado',M+42,y);
+
+  doc.setDrawColor(...blue);
+  doc.setLineWidth(.18);
+  doc.line(M,y+3,W-M,y+3);
+  y+=8;
+
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(35,35,40);
+  doc.text('Observações finais:',M,y);
+
+  doc.setFont('helvetica','normal');
+  doc.setTextColor(25,25,30);
+  const notes=doc.splitTextToSize(pdfIsFilled(data.finalNotes)?String(data.finalNotes):'Não informado',W-2*M);
+  doc.text(notes,M,y+4);
+
+  const notesH=Math.max(10,notes.length*4+6);
+  doc.setDrawColor(...blue);
+  doc.line(M,y+notesH-1,W-M,y+notesH-1);
+  y+=notesH;
+
+  // Fotos orientadas: exibe também as faltantes como "Foto não registrada".
+  const orientedMap=new Map((record.photos||[]).map(p=>[p.index,p]));
+  const orientedPhotos=PHOTO_SLOTS_PDF.map((label,index)=>{
+    const found=orientedMap.get(index);
+    return found
+      ? {...found,label,isExtra:false,missing:false}
+      : {index,label,isExtra:false,missing:true};
+  });
+
+  const extraPhotos=(record.extraPhotos||[]).map(p=>({...p,isExtra:true,missing:false}));
+  const photos=[...orientedPhotos,...extraPhotos];
+
+  for(let i=0;i<photos.length;i+=2){
+    newPage();
+    section('6. Fotos da vistoria',photosDone,photosTotal);
+
+    const slots=[photos[i],photos[i+1]];
+    const topY=y;
+    const imageW=W-2*M;
+    const imageH=88;
+
+    for(let s=0;s<2;s++){
+      const p=slots[s];
+      if(!p)continue;
+
+      const boxY=topY+s*122;
+
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...navy);
+      doc.text(p.isExtra?'Foto adicional':(p.label||'Foto'),M,boxY);
+
+      if(p.missing){
+        doc.setDrawColor(205,208,218);
+        doc.setLineWidth(.3);
+        doc.rect(M,boxY+4,imageW,imageH);
+
+        doc.setTextColor(...gray);
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(10);
+        doc.text('Foto não registrada',W/2,boxY+47,{align:'center'});
+      }else{
+        try{
+          const props=doc.getImageProperties(p.dataUrl);
+          const ratio=props.width/props.height;
+
+          let drawW=imageW;
+          let drawH=drawW/ratio;
+
+          if(drawH>imageH){
+            drawH=imageH;
+            drawW=drawH*ratio;
+          }
+
+          const drawX=M+(imageW-drawW)/2;
+          const drawY=boxY+4+(imageH-drawH)/2;
+
+          doc.addImage(
+            p.dataUrl,
+            'JPEG',
+            drawX,
+            drawY,
+            drawW,
+            drawH,
+            undefined,
+            'FAST'
+          );
+        }catch(e){
+          doc.setDrawColor(220);
+          doc.rect(M,boxY+4,imageW,imageH);
+          doc.setTextColor(...gray);
+          doc.setFont('helvetica','normal');
+          doc.text('Não foi possível renderizar esta foto.',M+4,boxY+12);
+        }
+      }
+
+      if(p.isExtra){
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(7.8);
+        doc.setTextColor(...gray);
+        doc.text('Apontamento:',M,boxY+98);
+
+        doc.setFont('helvetica','normal');
+        doc.setTextColor(30,30,35);
+        doc.text(
+          doc.splitTextToSize(pdfIsFilled(p.note)?String(p.note):'Não informado',imageW),
+          M,
+          boxY+102
+        );
+      }
+    }
+  }
+
+  const totalPages=doc.internal.getNumberOfPages();
+  for(let page=1;page<=totalPages;page++){
+    doc.setPage(page);
+    addFooter(page,totalPages);
+  }
+
+  const sanitizePart=(value,fallback)=>{
+    const text=String(value||fallback||'')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-zA-Z0-9]+/g,'_')
+      .replace(/^_+|_+$/g,'');
+    return text||fallback||'nao_informado';
+  };
+
+  const years=String(data.year||'').match(/\d{4}/g);
+  const year=years?.length?years[years.length-1]:(data.year||'sem_ano');
+
+  const filename=[
+    sanitizePart(data.brand,'sem_marca'),
+    sanitizePart(data.model,'sem_modelo'),
+    sanitizePart(year,'sem_ano'),
+    sanitizePart(data.color,'sem_cor')
+  ].join('_')+'.pdf';
+
+  const blob=doc.output('blob');
+  const url=URL.createObjectURL(blob);
+  if(lastGeneratedPdf?.url) URL.revokeObjectURL(lastGeneratedPdf.url);
+  lastGeneratedPdf={blob,url,filename};
+  return lastGeneratedPdf;
+}
