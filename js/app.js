@@ -2,6 +2,10 @@ const BODYWORK=['Para-choque dianteiro','Capô','Lateral dianteira esquerda','Po
 const INTERIOR=['Bancos e revestimentos','Painel e acabamento','Forro do teto','Ar-condicionado','Vidros e travas elétricas','Multimídia / rádio','Câmera / sensor de estacionamento','Luzes de advertência no painel'];
 const MECHANICAL=['Motor em funcionamento','Ruído anormal do motor','Vazamento aparente','Câmbio / embreagem','Direção','Suspensão / ruídos','Freios','Pneus dianteiros','Pneus traseiros','Rodas','Estepe','Macaco e chave de roda','Chave reserva','Manual'];
 const PHOTO_SLOTS=['Dianteira 45° esquerda','Traseira 45° esquerda','Traseira 45° direita','Dianteira 45° direita','Painel completo','Quilometragem com veículo ligado','Bancos dianteiros','Bancos traseiros','Porta-malas','Compartimento do motor'];
+const FIPE_API_BASE='https://fipe.parallelum.com.br/api/v2';
+let fipeBrands=[],fipeModels=[],fipeYears=[],fipeHydrating=false;
+let selectedFipeBrand=null,selectedFipeModel=null;
+
 let currentTab='active',currentRecord=null,deferredInstallPrompt=null,saveTimer=null;const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];document.addEventListener('DOMContentLoaded',init);
 async function init(){buildChecklist();buildPhotoSlots();bindUI();await renderList();updateStorageInfo();if('serviceWorker'in navigator)navigator.serviceWorker.register('./service-worker.js').catch(console.error);}
 function newRecord(){const now=new Date().toISOString();return{id:crypto.randomUUID(),formatVersion:'1.2',status:'active',createdAt:now,updatedAt:now,data:{},checklist:{bodywork:{},interior:{},mechanical:{}},photos:[],extraPhotos:[]};}
@@ -16,11 +20,16 @@ function bindUI(){$('#newEvaluationBtn').addEventListener('click',()=>openRecord
     }else{
       $$('.accordion.open').forEach(other=>other!==section&&other.classList.remove('open'));
       section.classList.add('open');
-      setTimeout(()=>section.scrollIntoView({behavior:'smooth',block:'start'}),40);
+      setTimeout(()=>{
+        const appHeader=document.querySelector('.app-header');
+        const offset=(appHeader?.offsetHeight||0)+8;
+        const top=section.getBoundingClientRect().top+window.scrollY-offset;
+        window.scrollTo({top:Math.max(0,top),behavior:'smooth'});
+      },40);
     }
   }));
   addCollapseButtons();$('#evaluationForm').addEventListener('input',scheduleSave);$('#evaluationForm').addEventListener('change',scheduleSave);$$('.check-item .segmented button').forEach(btn=>btn.addEventListener('click',()=>{const item=btn.closest('.check-item');item.querySelectorAll('.segmented button').forEach(b=>b.className='');const kind=valueKind(btn.dataset.value);btn.classList.add('selected',kind);item.querySelector('.issue-fields').classList.toggle('visible',['bad','warn'].includes(kind));scheduleSave();}));$$('.issue-note').forEach(i=>i.addEventListener('input',scheduleSave));bindPhotoInputsOnly();$('#extraPhotoInput').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;const dataUrl=await compressImage(file);currentRecord.extraPhotos.push({id:crypto.randomUUID(),label:'Foto adicional',note:'',dataUrl});e.target.value='';renderPhotos();scheduleSave();});$('#generatePdfBtn').addEventListener('click',handleGeneratePdf);$('#importJsonInput').addEventListener('change',importJson);$$('[data-close-pdf-modal]').forEach(el=>el.addEventListener('click',closePdfModal));$('#openPdfBtn').addEventListener('click',openGeneratedPdf);$('#sharePdfBtn').addEventListener('click',shareGeneratedPdf);$('#downloadPdfBtn').addEventListener('click',downloadGeneratedPdf);
-  $('#finishToHomeBtn').addEventListener('click',async()=>{closePdfModal();await saveNow();showHome();});window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstallPrompt=e;$('#installBtn').classList.remove('hidden');});$('#installBtn').addEventListener('click',async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$('#installBtn').classList.add('hidden');});}
+  $('#finishToHomeBtn').addEventListener('click',async()=>{closePdfModal();await saveNow();showHome();});window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstallPrompt=e;$('#installBtn').classList.remove('hidden');});$('#installBtn').addEventListener('click',async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$('#installBtn').classList.add('hidden');});bindFipeUI();}
 function addCollapseButtons(){
   $$('.accordion-body').forEach(body=>{
     if(body.querySelector('.collapse-section-btn'))return;
@@ -40,10 +49,323 @@ function collapseSection(section){
     window.scrollTo({top,behavior:'smooth'});
   });
 }
+
+function bindFipeUI(){
+  const brandInput=$('#fipeBrandInput');
+  const modelInput=$('#fipeModelInput');
+
+  brandInput?.addEventListener('input',()=>{
+    if(selectedFipeBrand && brandInput.value!==selectedFipeBrand.name){
+      selectedFipeBrand=null;
+      setHiddenFipe('fipeBrandCode','');
+      resetModelCascade();
+    }
+    showFipeSuggestions('#fipeBrandSuggestions',fipeBrands,brandInput.value,selectFipeBrand);
+  });
+  brandInput?.addEventListener('focus',()=>showFipeSuggestions('#fipeBrandSuggestions',fipeBrands,brandInput.value,selectFipeBrand));
+
+  modelInput?.addEventListener('input',()=>{
+    if(selectedFipeModel && modelInput.value!==selectedFipeModel.name){
+      selectedFipeModel=null;
+      setHiddenFipe('fipeModelCode','');
+      resetYearCascade();
+    }
+    showFipeSuggestions('#fipeModelSuggestions',fipeModels,modelInput.value,selectFipeModel);
+  });
+  modelInput?.addEventListener('focus',()=>{
+    if(!modelInput.disabled)showFipeSuggestions('#fipeModelSuggestions',fipeModels,modelInput.value,selectFipeModel);
+  });
+
+  document.addEventListener('click',event=>{
+    if(!event.target.closest('.autocomplete-field')){
+      hideFipeSuggestions('#fipeBrandSuggestions');
+      hideFipeSuggestions('#fipeModelSuggestions');
+    }
+  });
+
+  $('#fipeYearSelect')?.addEventListener('change',handleFipeYearChange);
+  $('#retryFipeBtn')?.addEventListener('click',async()=>{if(currentRecord)await hydrateFipeFields(currentRecord.data||{});});
+}
+
+function normalizeFipeSearch(value){
+  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+
+function hideFipeSuggestions(selector){$(selector)?.classList.add('hidden');}
+
+function showFipeSuggestions(selector,items,query,onSelect){
+  const box=$(selector); if(!box)return;
+  const q=normalizeFipeSearch(query);
+  const filtered=(items||[]).filter(item=>!q||normalizeFipeSearch(item.name).includes(q)).slice(0,50);
+  box.innerHTML='';
+  if(!filtered.length){
+    box.innerHTML='<div class="autocomplete-empty">Nenhuma opção encontrada.</div>';
+  }else{
+    filtered.forEach(item=>{
+      const btn=document.createElement('button');
+      btn.type='button'; btn.className='autocomplete-option'; btn.textContent=item.name;
+      btn.addEventListener('click',()=>onSelect(item)); box.appendChild(btn);
+    });
+  }
+  box.classList.remove('hidden');
+}
+
+function resetModelCascade(){
+  const input=$('#fipeModelInput');
+  if(input){input.value='';input.disabled=true;input.placeholder='Selecione primeiro a marca';}
+  selectedFipeModel=null; fipeModels=[];
+  setHiddenFipe('fipeModelCode','');
+  hideFipeSuggestions('#fipeModelSuggestions');
+  resetYearCascade();
+}
+
+function resetYearCascade(){
+  clearSelect($('#fipeYearSelect'),'Selecione primeiro o modelo');
+  fipeYears=[]; clearFipeDetail();
+}
+
+async function selectFipeBrand(item){
+  selectedFipeBrand=item;
+  $('#fipeBrandInput').value=item.name;
+  setHiddenFipe('fipeBrandCode',item.code||'');
+  hideFipeSuggestions('#fipeBrandSuggestions');
+  resetModelCascade();
+  try{
+    setFipeStatus('Carregando modelos da FIPE...','loading');
+    fipeModels=await fipeFetch(`/cars/brands/${encodeURIComponent(item.code)}/models`);
+    const input=$('#fipeModelInput'); input.disabled=false; input.placeholder='Digite para pesquisar';
+    setFipeStatus('Digite ou selecione o modelo.','success');
+  }catch(err){console.error(err);setFipeStatus('Não foi possível carregar os modelos.','error');}
+  scheduleSave(); updateFormUI();
+}
+
+async function selectFipeModel(item){
+  selectedFipeModel=item;
+  $('#fipeModelInput').value=item.name;
+  setHiddenFipe('fipeModelCode',item.code||'');
+  hideFipeSuggestions('#fipeModelSuggestions');
+  resetYearCascade();
+  $('#fipeVersionInput').value=item.name||'';
+  $('#fipeTransmissionInput').value=inferTransmissionFromFipeModel(item.name);
+  const brandCode=$('[name="fipeBrandCode"]').value;
+  try{
+    setFipeStatus('Carregando anos e combustíveis da FIPE...','loading');
+    fipeYears=await fipeFetch(`/cars/brands/${encodeURIComponent(brandCode)}/models/${encodeURIComponent(item.code)}/years`);
+    setSelectOptions($('#fipeYearSelect'),fipeYears.map(y=>({value:y.name,label:y.name,code:y.code})),'Selecionar ano / combustível');
+    $('#fipeYearSelect').disabled=false;
+    setFipeStatus('Selecione o ano / combustível.','success');
+  }catch(err){console.error(err);setFipeStatus('Não foi possível carregar os anos do veículo.','error');}
+  scheduleSave(); updateFormUI();
+}
+
+async function fipeFetch(path){
+  const response=await fetch(`${FIPE_API_BASE}${path}`,{
+    headers:{'Accept':'application/json'}
+  });
+  if(!response.ok){
+    let message=`Erro ${response.status}`;
+    try{
+      const body=await response.json();
+      if(body?.error)message=body.error;
+    }catch{}
+    const err=new Error(message);
+    err.status=response.status;
+    throw err;
+  }
+  return response.json();
+}
+
+function setFipeStatus(message,kind=''){
+  const box=$('#fipeStatusBox');
+  const text=$('#fipeStatusText');
+  if(!box||!text)return;
+  box.classList.remove('loading','success','error');
+  if(kind)box.classList.add(kind);
+  text.textContent=message;
+  $('#retryFipeBtn')?.classList.toggle('hidden',kind!=='error');
+}
+
+function setSelectOptions(select,items,placeholder,value=''){
+  if(!select)return;
+  select.innerHTML=`<option value="">${placeholder}</option>`+
+    items.map(item=>`<option value="${escapeHtml(item.value)}" data-code="${escapeHtml(item.code||'')}">${escapeHtml(item.label)}</option>`).join('');
+  if(value){
+    const exists=[...select.options].some(o=>o.value===value);
+    if(!exists)select.insertAdjacentHTML('beforeend',`<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`);
+    select.value=value;
+  }
+}
+
+function clearSelect(select,placeholder){
+  if(!select)return;
+  select.innerHTML=`<option value="">${placeholder}</option>`;
+  select.value='';
+  select.disabled=true;
+}
+
+function setHiddenFipe(name,value=''){
+  const el=$(`[name="${name}"]`);
+  if(el)el.value=value??'';
+}
+
+function inferTransmissionFromFipeModel(modelName){
+  const s=String(modelName||'');
+  if(/\bcvt\b/i.test(s))return'CVT';
+  if(/automatiz|dual.?logic|i-?motion|easytronic/i.test(s))return'Automatizado';
+  if(/\baut\.?\b|autom[aá]tic/i.test(s))return'Automático';
+  if(/\bman\.?\b|manual/i.test(s))return'Manual';
+  return'';
+}
+
+function clearFipeDetail({keepReferenceValue=false}={}){
+  $('#fipeVersionInput').value='';
+  $('#fipeTransmissionInput').value='';
+  $('#fipeFuelInput').value='';
+  setHiddenFipe('fipeYearCode','');
+  setHiddenFipe('fipeCode','');
+  setHiddenFipe('fipeReferenceMonth','');
+  if(!keepReferenceValue)$('#fipeReferenceValue').value='';
+  updateFipeReferenceInfo();
+}
+
+function updateFipeReferenceInfo(){
+  const code=$('[name="fipeCode"]')?.value||'';
+  const ref=$('[name="fipeReferenceMonth"]')?.value||'';
+  const info=$('#fipeReferenceInfo');
+  if(!info)return;
+  if(code||ref){
+    info.textContent=[code?`Código FIPE ${code}`:'',ref?`Referência: ${ref}`:''].filter(Boolean).join(' • ');
+  }else{
+    info.textContent='Preenchido automaticamente após selecionar o veículo.';
+  }
+}
+
+async function hydrateFipeFields(data){
+  fipeHydrating=true;
+  const brandInput=$('#fipeBrandInput');
+  const modelInput=$('#fipeModelInput');
+  const yearSelect=$('#fipeYearSelect');
+  try{
+    setFipeStatus('Carregando marcas da FIPE...','loading');
+    fipeBrands=await fipeFetch('/cars/brands');
+    const brandCode=data.fipeBrandCode||fipeBrands.find(b=>b.name===data.brand)?.code||'';
+    selectedFipeBrand=brandCode?(fipeBrands.find(b=>String(b.code)===String(brandCode))||{name:data.brand||'',code:brandCode}):null;
+    brandInput.value=data.brand||selectedFipeBrand?.name||''; brandInput.disabled=false;
+    setHiddenFipe('fipeBrandCode',brandCode);
+
+    if(brandCode){
+      setFipeStatus('Carregando modelos da FIPE...','loading');
+      fipeModels=await fipeFetch(`/cars/brands/${encodeURIComponent(brandCode)}/models`);
+      const modelCode=data.fipeModelCode||fipeModels.find(m=>m.name===data.model)?.code||'';
+      selectedFipeModel=modelCode?(fipeModels.find(m=>String(m.code)===String(modelCode))||{name:data.model||'',code:modelCode}):null;
+      modelInput.value=data.model||selectedFipeModel?.name||''; modelInput.disabled=false; modelInput.placeholder='Digite para pesquisar';
+      setHiddenFipe('fipeModelCode',modelCode);
+      if(modelCode){
+        setFipeStatus('Carregando anos da FIPE...','loading');
+        fipeYears=await fipeFetch(`/cars/brands/${encodeURIComponent(brandCode)}/models/${encodeURIComponent(modelCode)}/years`);
+        setSelectOptions(yearSelect,fipeYears.map(y=>({value:y.name,label:y.name,code:y.code})),'Selecionar ano / combustível',data.year||'');
+        yearSelect.disabled=false;
+        let yearCode=data.fipeYearCode||'';
+        if(!yearCode&&data.year)yearCode=fipeYears.find(y=>y.name===data.year)?.code||'';
+        setHiddenFipe('fipeYearCode',yearCode);
+      }else clearSelect(yearSelect,'Selecione primeiro o modelo');
+    }else{
+      modelInput.value='';modelInput.disabled=true;modelInput.placeholder='Selecione primeiro a marca';
+      clearSelect(yearSelect,'Selecione primeiro o modelo');
+    }
+
+    $('#fipeVersionInput').value=data.version||'';
+    $('#fipeTransmissionInput').value=data.transmission||'';
+    $('#fipeFuelInput').value=data.fuel||'';
+    setHiddenFipe('fipeCode',data.fipeCode||'');
+    setHiddenFipe('fipeReferenceMonth',data.fipeReferenceMonth||'');
+    updateFipeReferenceInfo();
+    setFipeStatus('FIPE disponível. Pesquise marca e modelo.','success');
+  }catch(err){
+    console.error('FIPE:',err);
+    brandInput.value=data.brand||'';brandInput.disabled=false;
+    modelInput.value=data.model||'';modelInput.disabled=!data.model;modelInput.placeholder=data.model?'Digite para pesquisar':'Selecione primeiro a marca';
+    if(data.year){setSelectOptions(yearSelect,[],'Selecionar ano / combustível',data.year);yearSelect.disabled=false;}else clearSelect(yearSelect,'Selecione primeiro o modelo');
+    $('#fipeVersionInput').value=data.version||'';$('#fipeTransmissionInput').value=data.transmission||'';$('#fipeFuelInput').value=data.fuel||'';
+    setHiddenFipe('fipeBrandCode',data.fipeBrandCode||'');setHiddenFipe('fipeModelCode',data.fipeModelCode||'');setHiddenFipe('fipeYearCode',data.fipeYearCode||'');setHiddenFipe('fipeCode',data.fipeCode||'');setHiddenFipe('fipeReferenceMonth',data.fipeReferenceMonth||'');
+    updateFipeReferenceInfo();
+    const suffix=err?.status===429?' Limite de consultas atingido.':'';
+    setFipeStatus(`Não foi possível consultar a FIPE.${suffix} Os dados já salvos foram preservados.`,'error');
+  }finally{fipeHydrating=false;updateFormUI();}
+}
+
+async function handleFipeYearChange(){
+  if(fipeHydrating)return;
+  const yearSelect=$('#fipeYearSelect');
+  const selected=yearSelect.selectedOptions[0];
+  const yearCode=selected?.dataset.code||fipeYears.find(y=>y.name===yearSelect.value)?.code||'';
+  setHiddenFipe('fipeYearCode',yearCode);
+
+  if(!yearCode){
+    clearFipeDetail();
+    setFipeStatus('Selecione um ano / combustível para consultar o preço.');
+    scheduleSave();
+    return;
+  }
+
+  const brandCode=$('[name="fipeBrandCode"]').value;
+  const modelCode=$('[name="fipeModelCode"]').value;
+
+  try{
+    setFipeStatus('Consultando preço FIPE...','loading');
+    const detail=await fipeFetch(`/cars/brands/${encodeURIComponent(brandCode)}/models/${encodeURIComponent(modelCode)}/years/${encodeURIComponent(yearCode)}`);
+
+    // Mantém a descrição completa retornada pela API como versão/descrição FIPE.
+    $('#fipeVersionInput').value=detail.model||$('#fipeModelInput').value||'';
+    $('#fipeFuelInput').value=detail.fuel||'';
+    $('#fipeTransmissionInput').value=inferTransmissionFromFipeModel(detail.model||$('#fipeModelInput').value);
+    $('#fipeReferenceValue').value=detail.price||'';
+
+    setHiddenFipe('fipeCode',detail.codeFipe||'');
+    setHiddenFipe('fipeReferenceMonth',detail.referenceMonth||'');
+
+    updateFipeReferenceInfo();
+    setFipeStatus(`Preço FIPE consultado${detail.referenceMonth?` • ${detail.referenceMonth}`:''}.`,'success');
+  }catch(err){
+    console.error(err);
+    setFipeStatus('Não foi possível consultar o preço FIPE deste veículo.','error');
+  }
+
+  scheduleSave();
+}
+
 function valueKind(v){const s=String(v||'').toLowerCase();if(['ok','normal','bom','excelente','presente','não','nao'].includes(s))return'good';if(['avaria','problema','anormal','ruim','sim','ausente','acesa'].includes(s))return'bad';if(['regular','atenção','atencao'].includes(s))return'warn';return'neutral';}
-async function openRecord(record){currentRecord=record;$('#homeView').classList.remove('active');$('#formView').classList.add('active');loadForm(record);window.scrollTo({top:0,behavior:'instant'});}
+async function openRecord(record){currentRecord=record;$('#homeView').classList.remove('active');$('#formView').classList.add('active');await loadForm(record);window.scrollTo({top:0,behavior:'instant'});}
 function showHome(){$('#formView').classList.remove('active');$('#homeView').classList.add('active');currentRecord=null;renderList();updateStorageInfo();}
-function loadForm(record){const form=$('#evaluationForm');form.reset();[...form.elements].forEach(el=>{if(el.name&&record.data?.[el.name]!==undefined)el.value=record.data[el.name]??'';});$$('.check-item').forEach(item=>{const saved=record.checklist?.[item.dataset.group]?.[item.dataset.key];item.querySelectorAll('.segmented button').forEach(b=>{b.className='';if(saved?.value===b.dataset.value)b.classList.add('selected',valueKind(saved.value));});const note=item.querySelector('.issue-note');note.value=saved?.note||'';note.closest('.issue-fields').classList.toggle('visible',!!saved?.note||['bad','warn'].includes(valueKind(saved?.value)));});calculateCosts();renderPhotos();updateFormUI();}
+async function loadForm(record){
+  const form=$('#evaluationForm');
+  form.reset();
+
+  // Carrega primeiro os campos que não dependem da cascata FIPE.
+  [...form.elements].forEach(el=>{
+    if(!el.name)return;
+    if(['brand','model','year'].includes(el.name))return;
+    if(record.data?.[el.name]!==undefined)el.value=record.data[el.name]??'';
+  });
+
+  await hydrateFipeFields(record.data||{});
+
+  $$('.check-item').forEach(item=>{
+    const saved=record.checklist?.[item.dataset.group]?.[item.dataset.key];
+    item.querySelectorAll('.segmented button').forEach(b=>{
+      b.className='';
+      if(saved?.value===b.dataset.value)b.classList.add('selected',valueKind(saved.value));
+    });
+    const note=item.querySelector('.issue-note');
+    note.value=saved?.note||'';
+    note.closest('.issue-fields').classList.toggle('visible',!!saved?.note||['bad','warn'].includes(valueKind(saved?.value)));
+  });
+
+  calculateCosts();
+  renderPhotos();
+  updateFipeReferenceInfo();
+  updateFormUI();
+}
 function collectRecord(){if(!currentRecord)return null;const fd=new FormData($('#evaluationForm')),data=Object.fromEntries(fd.entries());data.totalCost=$('#totalCost').value;const checklist={bodywork:{},interior:{},mechanical:{}};$$('.check-item').forEach(item=>{const selected=item.querySelector('.segmented button.selected');checklist[item.dataset.group][item.dataset.key]={label:item.dataset.label,value:selected?.dataset.value||'',note:item.querySelector('.issue-note').value.trim()};});$$('.extra-photo-entry').forEach(entry=>{const target=currentRecord.extraPhotos.find(p=>p.id===entry.dataset.id);if(target)target.note=entry.querySelector('textarea').value.trim();});currentRecord.data=data;currentRecord.checklist=checklist;currentRecord.updatedAt=new Date().toISOString();return currentRecord;}
 function scheduleSave(){calculateCosts();updateFormUI();clearTimeout(saveTimer);$('#saveIndicator').textContent='Salvando…';saveTimer=setTimeout(saveNow,450);}async function saveNow(){if(!currentRecord)return;collectRecord();await dbPut(currentRecord);$('#saveIndicator').textContent='Salvo neste dispositivo';}
 function calculateCosts(){const get=n=>parseMoney($(`[name="${n}"]`)?.value||'');const total=get('bodyworkCost')+get('mechanicalCost')+get('tiresCost')+get('otherCost');$('#totalCost').value=total?formatMoney(total):'';}function parseMoney(v){const s=String(v||'').replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.');return Number(s)||0;}function formatMoney(v){return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v);}

@@ -117,14 +117,49 @@
           </button>
           <div class="accordion-body"><div class="grid">
             <label>Placa<input name="plate" required maxlength="8" placeholder="ABC1D23" /></label>
-            <label>Marca<input name="brand" required /></label>
-            <label class="span-2">Modelo<input name="model" required /></label>
-            <label class="span-2">Versão<input name="version" /></label>
-            <label>Ano fab./modelo<input name="year" placeholder="2024/2025" /></label>
+
+            <label class="autocomplete-field">Marca
+              <input name="brand" id="fipeBrandInput" type="text" autocomplete="off" placeholder="Digite para pesquisar" required />
+              <div id="fipeBrandSuggestions" class="autocomplete-list hidden" role="listbox"></div>
+            </label>
+
+            <label class="span-2 autocomplete-field">Modelo
+              <input name="model" id="fipeModelInput" type="text" autocomplete="off" placeholder="Selecione primeiro a marca" required disabled />
+              <div id="fipeModelSuggestions" class="autocomplete-list hidden" role="listbox"></div>
+            </label>
+
+            <label class="span-2">Versão / descrição FIPE
+              <input name="version" id="fipeVersionInput" readonly placeholder="Preenchida pela FIPE" />
+            </label>
+
+            <label>Ano / combustível
+              <select name="year" id="fipeYearSelect" disabled>
+                <option value="">Selecione primeiro o modelo</option>
+              </select>
+            </label>
+
             <label>Quilometragem<input name="mileage" type="number" min="0" /></label>
             <label>Cor<input name="color" /></label>
-            <label>Câmbio<select name="transmission"><option value="">Selecionar</option><option>Manual</option><option>Automático</option><option>CVT</option><option>Automatizado</option></select></label>
-            <label>Combustível<select name="fuel"><option value="">Selecionar</option><option>Flex</option><option>Gasolina</option><option>Diesel</option><option>Híbrido</option><option>Elétrico</option></select></label>
+
+            <label>Câmbio
+              <input name="transmission" id="fipeTransmissionInput" readonly placeholder="Preenchido pela FIPE" />
+            </label>
+
+            <label>Combustível
+              <input name="fuel" id="fipeFuelInput" readonly placeholder="Preenchido pela FIPE" />
+            </label>
+
+            <div class="span-2 fipe-status-box" id="fipeStatusBox" aria-live="polite">
+              <span class="fipe-status-dot"></span>
+              <span id="fipeStatusText">Dados veiculares fornecidos pela FIPE API.</span>
+              <button type="button" id="retryFipeBtn" class="fipe-retry hidden">Tentar novamente</button>
+            </div>
+
+            <input type="hidden" name="fipeBrandCode" />
+            <input type="hidden" name="fipeModelCode" />
+            <input type="hidden" name="fipeYearCode" />
+            <input type="hidden" name="fipeCode" />
+            <input type="hidden" name="fipeReferenceMonth" />
           </div></div>
         </section>
 
@@ -187,7 +222,10 @@
             <span class="chevron">⌄</span>
           </button>
           <div class="accordion-body"><div class="grid">
-            <label>Valor FIPE / referência<input name="referenceValue" inputmode="decimal" placeholder="0,00" /></label>
+            <label>Valor FIPE / referência
+              <input name="referenceValue" id="fipeReferenceValue" inputmode="decimal" placeholder="0,00" readonly />
+              <small class="field-hint" id="fipeReferenceInfo">Preenchido automaticamente após selecionar o veículo.</small>
+            </label>
             <label>Valor solicitado<input name="requestedValue" inputmode="decimal" placeholder="0,00" /></label>
             <label>Funilaria / pintura<input name="bodyworkCost" inputmode="decimal" placeholder="0,00" /></label>
             <label>Mecânica<input name="mechanicalCost" inputmode="decimal" placeholder="0,00" /></label>

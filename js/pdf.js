@@ -140,7 +140,7 @@ async function generateEvaluationPDF(record){
     doc.setFontSize(7.3);
     doc.setTextColor(...gray);
     doc.text('Speed Multimarcas • Av. Antonio Marques Figueira, 149 • Suzano/SP • (11) 4747-8724',M,H-9);
-    doc.text(`CNPJ 35.649.942/0001-80 • Página ${page} de ${total}`,W-M,H-9,{align:'right'});
+    doc.text(`Página ${page} de ${total}`,W-M,H-9,{align:'right'});
   };
 
   const newPage=()=>{doc.addPage();addHeader();y=29;};
